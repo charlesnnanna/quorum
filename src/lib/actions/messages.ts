@@ -3,6 +3,7 @@
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth/auth'
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server'
+import type { Json } from '@/lib/supabase/types'
 import { messageSchema } from '@/lib/validations/message'
 import type { Message, MessageSearchResult, ServerActionResponse } from '@/types'
 
@@ -33,7 +34,7 @@ export async function sendMessage(input: unknown): Promise<ServerActionResponse<
       sender_type: 'human',
       content: parsed.data.content,
       status: 'delivered',
-      ...(parsed.data.metadata ? { metadata: parsed.data.metadata } : {}),
+      ...(parsed.data.metadata ? { metadata: parsed.data.metadata as Json } : {}),
     })
     .select()
     .single()

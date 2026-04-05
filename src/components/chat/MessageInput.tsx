@@ -24,7 +24,7 @@ interface MessageInputProps {
  */
 export default function MessageInput({
   roomId,
-  currentUser,
+  currentUser: _currentUser,
   isAIResponding = false,
   onStartTyping,
   onStopTyping,

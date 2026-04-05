@@ -3,7 +3,7 @@
 // - This route is a placeholder for potential server-side fallback
 // - No external API needed — SpeechSynthesis handles TTS in the browser
 
-export async function POST(req: Request) {
+export async function POST(_req: Request) {
   // TODO: implement server-side synthesis fallback if needed
   return new Response("Not implemented", { status: 501 });
 }

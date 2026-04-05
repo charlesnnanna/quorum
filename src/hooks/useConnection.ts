@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'reconnecting'
@@ -23,7 +23,7 @@ export function useConnection(onReconnect?: () => void) {
     const channel = supabase.channel('connection-monitor')
 
     channel
-      .on('system', { event: '*' } as any, (payload: any) => {
+      .on('system', { event: '*' } as Record<string, unknown>, (payload: Record<string, unknown>) => {
         // Supabase Realtime system events include connection status
         if (payload?.type === 'close' || payload?.type === 'error') {
           setStatus('disconnected')

@@ -1,6 +1,6 @@
 'use client'
 
-import { X, Crown } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useUIStore } from '@/lib/stores/uiStore'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'

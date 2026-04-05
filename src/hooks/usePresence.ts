@@ -99,7 +99,7 @@ export function usePresence(
       supabase.removeChannel(channel)
       channelRef.current = null
     }
-  }, [roomId, currentUser?.userId, currentUser?.username, currentUser?.avatarUrl])
+  }, [roomId, currentUser])
 
   /**
    * Call this on every keystroke in the message input.

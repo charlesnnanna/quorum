@@ -127,10 +127,11 @@ export function useVoice(): UseVoiceReturn {
 
       for (let i = 0; i < event.results.length; i++) {
         const result = event.results[i]
+        if (!result) continue
         if (result.isFinal) {
-          finalTranscript += result[0].transcript
+          finalTranscript += result[0]?.transcript ?? ''
         } else {
-          interimTranscript += result[0].transcript
+          interimTranscript += result[0]?.transcript ?? ''
         }
       }
 

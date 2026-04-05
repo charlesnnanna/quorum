@@ -739,6 +739,33 @@ GitHub OAuth callback URLs:
 
 ---
 
+## Linting & Type Safety Rules
+
+ESLint is configured via `.eslintrc.json` extending `next/core-web-vitals` and
+`next/typescript`. The build **fails** on any lint error or type error.
+
+### Rules to follow in all new code
+
+```
+✗ No unused variables or imports — remove them, don't comment them out
+✗ No `any` types — use specific types or `unknown` with narrowing
+✓ Prefix intentionally unused function params with `_` (e.g. `_req`, `_event`)
+✓ Always include all dependencies in React hook dep arrays, or add an
+  `// eslint-disable-next-line react-hooks/exhaustive-deps` comment with
+  a reason when intentionally omitting
+✓ Supabase generated types use `string | null` for columns with DB defaults
+  (created_at, status, etc.) — our `Message` type in `src/types/index.ts`
+  overrides these to non-nullable. If adding new Supabase types, override
+  nullable DB-default columns the same way.
+✓ Use `z.record(z.string(), z.unknown())` not `z.record(z.unknown())` —
+  Zod requires explicit key schema
+✓ Guard array index access (`arr[i]`) with a null check when TS is strict
+✓ Run `npm run build` before considering work complete — it catches both
+  ESLint and TypeScript errors
+```
+
+---
+
 ## Test Credentials
 
 | User  | Email          | Password     |

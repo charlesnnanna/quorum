@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import {
   Menu,
   Hash,
@@ -45,10 +44,9 @@ export default function RoomHeader({
   roomDescription,
   isPrivate,
   memberCount,
-  currentUser,
+  currentUser: _currentUser,
   onlineUsers,
 }: RoomHeaderProps) {
-  const router = useRouter()
   const {
     isSearchOpen,
     setSearchOpen,

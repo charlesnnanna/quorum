@@ -1,7 +1,6 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { cn } from '@/lib/utils'
 import { useUIStore } from '@/lib/stores/uiStore'
 import ConnectionBanner from '@/components/ui/ConnectionBanner'
 import MobileDrawer from './MobileDrawer'

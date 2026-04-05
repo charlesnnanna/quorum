@@ -137,7 +137,7 @@ export default function MessageList({
       }, 250)
       return () => clearTimeout(t)
     }
-  }, [messages])
+  }, [messages, members])
 
   // ── Search highlight: scroll to message ────────────────────────────
 
@@ -213,7 +213,8 @@ export default function MessageList({
     })()
 
     return () => { cancelled = true }
-  }, [highlightedMessageId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightedMessageId, roomId, setHighlightedMessageId])
 
   // ── Virtualizer ─────────────────────────────────────────────────────
 

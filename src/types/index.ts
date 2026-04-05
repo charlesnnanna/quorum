@@ -4,7 +4,11 @@ import type { Tables } from '@/lib/supabase/types'
 export type Profile = Tables<'profiles'>
 export type Room = Tables<'rooms'>
 export type RoomMember = Tables<'room_members'>
-export type Message = Tables<'messages'>
+/** Messages always have created_at and status (DB defaults). Override nullability. */
+export type Message = Omit<Tables<'messages'>, 'created_at' | 'status'> & {
+  created_at: string
+  status: string
+}
 
 // ── Enums ──────────────────────────────────────────────────────────
 export type MessageStatus = 'sending' | 'delivered' | 'error'

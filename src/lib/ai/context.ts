@@ -63,7 +63,9 @@ export function truncateToContextWindow(
   let cutoff = messages.length
 
   for (let i = messages.length - 1; i >= 0; i--) {
-    const cost = Math.ceil(messages[i].content.length / CHARS_PER_TOKEN)
+    const msg = messages[i]
+    if (!msg) continue
+    const cost = Math.ceil(msg.content.length / CHARS_PER_TOKEN)
     if (budget - cost < 0) break
     budget -= cost
     cutoff = i
