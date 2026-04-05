@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth/auth'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { ensureProfile } from '@/lib/actions/auth'
 import AppShell from '@/components/rooms/AppShell'
+import type { RoomWithDetails } from '@/types'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // 1. Auth check
@@ -21,7 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const supabase = createServiceRoleClient()
   const { data: rooms } = await supabase.rpc('get_user_rooms', {
     p_user_id: session.user.id,
-  })
+  }) as { data: RoomWithDetails[] | null }
 
   return (
     <AppShell currentUser={profile} initialRooms={rooms ?? []}>

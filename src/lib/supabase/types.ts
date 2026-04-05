@@ -179,18 +179,21 @@ export type Database = {
       room_members: {
         Row: {
           joined_at: string | null;
+          last_read_at: string | null;
           role: string | null;
           room_id: string;
           user_id: string;
         };
         Insert: {
           joined_at?: string | null;
+          last_read_at?: string | null;
           role?: string | null;
           room_id: string;
           user_id: string;
         };
         Update: {
           joined_at?: string | null;
+          last_read_at?: string | null;
           role?: string | null;
           room_id?: string;
           user_id?: string;
