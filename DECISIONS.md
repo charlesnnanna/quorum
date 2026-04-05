@@ -35,34 +35,33 @@ The spec requires a real-time backend. Two options were given: Firebase and Supa
 
 ---
 
-## ADR-002: Google Gemini 1.5 Flash over OpenAI
+## ADR-002: OpenAI GPT-4o-mini for AI Assistant
 
 **Date:** 2026-04-04
-**Status:** Accepted
+**Status:** Accepted (updated: switched from Google Gemini to OpenAI)
 
 **Context:**
-Need an AI model for the @ai assistant feature. OpenAI requires a credit card
-and has per-token usage costs even for development.
+Need an AI model for the @ai assistant feature. Originally chose Google Gemini
+1.5 Flash for its free tier, but switched to OpenAI GPT-4o-mini for better
+response quality and reliability.
 
 **Options Considered:**
-1. OpenAI GPT-4o / GPT-3.5 via `@ai-sdk/openai`
+1. OpenAI GPT-4o-mini via `@ai-sdk/openai`
 2. Google Gemini 1.5 Flash via `@ai-sdk/google`
 
-**Decision:** Google Gemini 1.5 Flash
+**Decision:** OpenAI GPT-4o-mini
 
 **Reasons:**
-- Free tier at aistudio.google.com — no credit card required.
-- Generous rate limits (15 RPM, 1M TPM) sufficient for development and demo.
+- Stronger reasoning and more consistent responses than Gemini Flash.
+- GPT-4o-mini is affordable with fast response times.
 - Vercel AI SDK provides provider-agnostic streaming via the `ai` package,
-  so switching to OpenAI or Claude later requires changing one import — not
-  rewriting the streaming logic.
+  so the switch required changing only the import and model name.
 - The `ai` package works on Netlify; it is not Vercel-specific.
 
 **Tradeoffs:**
-- GPT-4o has stronger reasoning on complex tasks.
-- Gemini's API is newer and has less community tooling.
-  Acceptable because the AI assistant handles straightforward Q&A, not
-  multi-step agentic workflows.
+- Requires an OpenAI API key with billing (no free tier like Gemini).
+- Per-token costs, though GPT-4o-mini is very affordable.
+  Acceptable for the quality improvement over Gemini Flash.
 
 ---
 

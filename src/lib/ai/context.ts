@@ -1,5 +1,5 @@
 import { generateText } from 'ai'
-import { google } from '@ai-sdk/google'
+import { openai } from '@ai-sdk/openai'
 import type { ModelMessage } from 'ai'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 
@@ -20,6 +20,7 @@ interface DBMessage {
   sender_type: string
   content: string
   sender_id: string | null
+  status?: string | null
 }
 
 /**
@@ -79,7 +80,7 @@ export function truncateToContextWindow(
 
 /**
  * Summarize older messages into a 2–3 sentence digest using a fast,
- * non-streaming Gemini call.
+ * non-streaming OpenAI call.
  *
  * Called only when the full conversation exceeds the token budget. The summary
  * is injected into the system prompt so the AI retains awareness of early
@@ -88,7 +89,7 @@ export function truncateToContextWindow(
  * **Tradeoff:**
  * - Skipping summarization → AI has zero memory of dropped messages; may
  *   contradict earlier decisions or re-ask resolved questions.
- * - Summarizing → adds one extra (cheap, fast) Gemini call but captures the
+ * - Summarizing → adds one extra (cheap, fast) OpenAI call but captures the
  *   gist of history in ~50 tokens instead of thousands.
  * - The summary is lossy by design: fine-grained details are sacrificed for
  *   a compact representation that fits alongside the recent messages.
@@ -106,7 +107,7 @@ export async function summarizeOldMessages(
     .join('\n')
 
   const { text } = await generateText({
-    model: google('gemini-1.5-flash'),
+    model: openai('gpt-4o-mini'),
     prompt: `Summarize this team conversation in 2–3 sentences. Preserve key topics, decisions, and any open questions:\n\n${transcript}`,
   })
 
@@ -142,19 +143,26 @@ export async function buildAIContext(
 
   const { data: rows } = await supabase
     .from('messages')
-    .select('sender_type, content, sender_id')
+    .select('sender_type, content, sender_id, status')
     .eq('room_id', roomId)
     .order('created_at', { ascending: true })
     .limit(MAX_MESSAGES_TO_FETCH)
 
-  const history: DBMessage[] = rows ?? []
+  // Filter out empty/sending placeholder messages (e.g. the AI placeholder
+  // that was just inserted) so the model doesn't see an empty assistant turn.
+  const history: DBMessage[] = (rows ?? []).filter(
+    (m) => m.content.trim() !== '' && m.status !== 'sending'
+  )
 
-  // Append the current user message (it may not be in the DB yet when
-  // this runs, depending on timing)
-  const allMessages: DBMessage[] = [
-    ...history,
-    { sender_type: 'human', content: currentMessage, sender_id: null },
-  ]
+  // Only append currentMessage if it isn't already the last message in
+  // history (it may have been inserted before this runs).
+  const lastMsg = history[history.length - 1]
+  const alreadyInHistory =
+    lastMsg?.sender_type === 'human' && lastMsg.content === currentMessage
+
+  const allMessages: DBMessage[] = alreadyInHistory
+    ? history
+    : [...history, { sender_type: 'human', content: currentMessage, sender_id: null }]
 
   // ── Check token budget ──────────────────────────────────────────────
   const totalTokens = estimateTokens(allMessages)

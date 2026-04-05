@@ -17,21 +17,18 @@ export function useConnection(onReconnect?: () => void) {
   onReconnectRef.current = onReconnect
 
   useEffect(() => {
+    let cancelled = false
     const supabase = createClient()
 
-    // Use a lightweight presence channel to monitor connection health
-    const channel = supabase.channel('connection-monitor')
+    const channel = supabase.channel(`connection-monitor-${Date.now()}`)
 
     channel
-      .on('system', { event: '*' } as Record<string, unknown>, (payload: Record<string, unknown>) => {
-        // Supabase Realtime system events include connection status
-        if (payload?.type === 'close' || payload?.type === 'error') {
-          setStatus('disconnected')
-          wasDisconnectedRef.current = true
-        }
+      .on('broadcast', { event: 'heartbeat' }, () => {
+        // No-op — listener exists so the channel subscribes successfully
       })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
+      .subscribe((subscribeStatus) => {
+        if (cancelled) return
+        if (subscribeStatus === 'SUBSCRIBED') {
           if (wasDisconnectedRef.current) {
             setStatus('connected')
             wasDisconnectedRef.current = false
@@ -39,16 +36,12 @@ export function useConnection(onReconnect?: () => void) {
           } else {
             setStatus('connected')
           }
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          setStatus('disconnected')
-          wasDisconnectedRef.current = true
-        } else if (status === 'CLOSED') {
+        } else if (subscribeStatus === 'CHANNEL_ERROR' || subscribeStatus === 'TIMED_OUT') {
           setStatus('disconnected')
           wasDisconnectedRef.current = true
         }
       })
 
-    // Also listen to browser online/offline as a fast signal
     const handleOffline = () => {
       setStatus('disconnected')
       wasDisconnectedRef.current = true
@@ -56,8 +49,6 @@ export function useConnection(onReconnect?: () => void) {
 
     const handleOnline = () => {
       setStatus('reconnecting')
-      // Supabase will auto-reconnect; the channel subscribe callback
-      // above will fire 'SUBSCRIBED' and trigger onReconnect
     }
 
     window.addEventListener('offline', handleOffline)
@@ -69,6 +60,7 @@ export function useConnection(onReconnect?: () => void) {
     }
 
     return () => {
+      cancelled = true
       supabase.removeChannel(channel)
       window.removeEventListener('offline', handleOffline)
       window.removeEventListener('online', handleOnline)

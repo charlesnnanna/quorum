@@ -1,13 +1,15 @@
 import { useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { createAIPlaceholder } from '@/lib/actions/messages'
 import { useAIStore } from '@/lib/stores/aiStore'
+import { useMessageStore } from '@/lib/stores/messageStore'
 
 const AI_MENTION_REGEX = /@ai\b/i
 
 /** Show "AI is taking longer than usual" after this many ms. */
-const SLOW_THRESHOLD_MS = 10_000
+const SLOW_THRESHOLD_MS = 20_000
 /** Hard cancel the AI request after this many ms. */
-const TIMEOUT_MS = 30_000
+const TIMEOUT_MS = 120_000
 
 interface UseAIStreamOptions {
   roomId: string
@@ -21,7 +23,7 @@ interface UseAIStreamOptions {
  * 2. Insert an AI placeholder message (status: 'sending', content: '').
  *    → Supabase Realtime broadcasts the INSERT → all clients show "AI typing…"
  * 3. POST to `/api/ai/chat` with { roomId, aiMessageId, currentMessage }.
- *    → Route handler streams Gemini tokens, updating the placeholder row.
+ *    → Route handler streams OpenAI tokens, updating the placeholder row.
  *    → Supabase Realtime broadcasts each UPDATE → all clients see the stream.
  * 4. On 429 (server rate limit): mark placeholder as error.
  * 5. On network/stream failure: mark placeholder as error.
@@ -64,25 +66,15 @@ export function useAIStream({ roomId, userId }: UseAIStreamOptions) {
       isStreamingRef.current = true
       recordInvocation(userId)
 
-      // ── 2. Insert AI placeholder ──────────────────────────────────
-      const supabase = createClient()
-
-      const { data: placeholder, error: insertError } = await supabase
-        .from('messages')
-        .insert({
-          room_id: roomId,
-          sender_id: null,
-          sender_type: 'ai',
-          content: '',
-          status: 'sending',
-        })
-        .select()
-        .single()
+      // ── 2. Insert AI placeholder via server action (bypasses RLS) ──
+      const { data: placeholder, error: insertError } = await createAIPlaceholder(roomId)
 
       if (insertError || !placeholder) {
         isStreamingRef.current = false
-        return { error: 'Failed to create AI message.' }
+        return { error: insertError ?? 'Failed to create AI message.' }
       }
+
+      const supabase = createClient()
 
       // ── 3. POST to streaming endpoint with timeout ───────────────
       const abortController = new AbortController()
@@ -146,15 +138,30 @@ export function useAIStream({ roomId, userId }: UseAIStreamOptions) {
           return { error: 'AI request failed.' }
         }
 
-        // Consume the stream — content updates happen server-side via
-        // Supabase Realtime. We drain to keep the connection alive.
+        // Read streamed tokens and accumulate them so we can update the
+        // message store directly — acts as a fallback if Realtime UPDATE
+        // events are delayed or not received.
         const reader = response.body?.getReader()
+        const decoder = new TextDecoder()
+        let accumulated = ''
+
         if (reader) {
           while (true) {
-            const { done } = await reader.read()
+            const { done, value } = await reader.read()
             if (done) break
+            accumulated += decoder.decode(value, { stream: true })
+            // Update the store progressively so the user sees streaming
+            useMessageStore.getState().updateMessage(roomId, placeholder.id, {
+              content: accumulated,
+            })
           }
         }
+
+        // Final update: mark as delivered with complete content
+        useMessageStore.getState().updateMessage(roomId, placeholder.id, {
+          content: accumulated,
+          status: 'delivered',
+        })
 
         cleanup()
         return { error: null }

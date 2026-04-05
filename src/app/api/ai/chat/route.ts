@@ -1,6 +1,8 @@
+import { headers } from 'next/headers'
 import { streamText } from 'ai'
-import { google } from '@ai-sdk/google'
-import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { openai } from '@ai-sdk/openai'
+import { auth } from '@/lib/auth/auth'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 import { buildAIContext } from '@/lib/ai/context'
 import { createMessageUpdater } from '@/lib/ai/stream'
 import { checkAIRateLimit } from '@/lib/ai/ratelimit'
@@ -15,16 +17,13 @@ export const maxDuration = 26
  * 1. Inserted the user's message (status: 'delivered')
  * 2. Inserted an AI placeholder message (status: 'sending', content: '')
  *
- * This handler streams Gemini's response token-by-token, updating the
+ * This handler streams OpenAI's response token-by-token, updating the
  * AI message row in Supabase as it goes. Supabase Realtime pushes each
  * UPDATE to all connected clients so everyone sees the stream.
  */
 export async function POST(req: Request) {
   // ── 1. Auth ────────────────────────────────────────────────────────
-  const supabase = await createServerClient()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  const session = await auth.api.getSession({ headers: headers() })
 
   if (!session) {
     return new Response('Unauthorized', { status: 401 })
@@ -44,6 +43,7 @@ export async function POST(req: Request) {
   }
 
   // ── 3. Authorization — verify room membership ──────────────────────
+  const supabase = createServiceRoleClient()
   const { data: membership } = await supabase
     .from('room_members')
     .select()
@@ -74,8 +74,7 @@ export async function POST(req: Request) {
   }
 
   // ── 5. Build context window (fetches history, truncates, summarizes) ─
-  const serviceClient = createServiceRoleClient()
-  const updater = createMessageUpdater(serviceClient, aiMessageId)
+  const updater = createMessageUpdater(supabase, aiMessageId)
 
   let context: Awaited<ReturnType<typeof buildAIContext>>
 
@@ -87,14 +86,14 @@ export async function POST(req: Request) {
     return new Response('Context building failed', { status: 500 })
   }
 
-  // ── 6. Stream from Gemini, updating Supabase as tokens arrive ──────
+  // ── 6. Stream from OpenAI, updating Supabase as tokens arrive ──────
   const encoder = new TextEncoder()
 
   const readable = new ReadableStream({
     async start(controller) {
       try {
         const result = streamText({
-          model: google('gemini-1.5-flash'),
+          model: openai('gpt-4o-mini'),
           system: context.systemPrompt,
           messages: context.messages,
         })
@@ -111,7 +110,7 @@ export async function POST(req: Request) {
         await updater.finish()
         controller.close()
       } catch {
-        // Gemini failure: update message to error state
+        // OpenAI failure: update message to error state
         await updater.error()
         controller.close()
       }

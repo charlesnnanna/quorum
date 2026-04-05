@@ -28,9 +28,9 @@ Built as a technical assessment for Kochanet.
 | Database      | Supabase (Postgres)        | Relational model fits chat data, RLS for DB-layer auth              |
 | Real-time     | Supabase Realtime          | Postgres logical replication, built-in Presence                     |
 | Auth          | BetterAuth                 | Session cookies, OAuth — manages GitHub OAuth flow                  |
-| AI Chat       | Google Gemini 1.5 Flash    | Free tier, no credit card, generous limits                          |
+| AI Chat       | OpenAI GPT-4o-mini         | Fast, affordable, high-quality responses                            |
 | AI SDK Core   | `ai` (Vercel AI SDK)       | Provider-agnostic streaming — works on Netlify, not Vercel-specific |
-| AI Provider   | `@ai-sdk/google`           | Google Gemini adapter for Vercel AI SDK                             |
+| AI Provider   | `@ai-sdk/openai`           | OpenAI adapter for Vercel AI SDK                                    |
 | Voice STT     | Web Speech API             | Browser-native, completely free, no API key needed                  |
 | Voice TTS     | Web Speech SynthesisAPI    | Browser-native, completely free, no API key needed                  |
 | State         | Zustand                    | Lightweight, works well with Supabase realtime subscriptions        |
@@ -43,13 +43,13 @@ Built as a technical assessment for Kochanet.
 ## CRITICAL: What NOT to Install or Generate
 
 ```
-✗ Do NOT install the `openai` npm package
-✗ Do NOT install `@ai-sdk/openai`
+✗ Do NOT install the `openai` npm package (use `@ai-sdk/openai` instead)
+✗ Do NOT install `@ai-sdk/google`
 ✗ Do NOT generate tailwind.config.ts or tailwind.config.js — Tailwind v4 has NO config file
 ✗ Do NOT use `@tailwind base/components/utilities` — Tailwind v4 uses `@import "tailwindcss"`
 ✗ Do NOT use `h-screen` for full-height containers — use `h-dvh`
 ✗ Do NOT set font-size below 16px on inputs/textareas — iOS Safari zooms in
-✗ Do NOT use the `openai` import anywhere in the codebase
+✗ Do NOT use the `google` import or `@ai-sdk/google` anywhere in the codebase
 ✗ Do NOT make a page or layout a Client Component unless it absolutely requires
   browser APIs — auth checks and initial data fetching belong in Server Components
 ```
@@ -391,7 +391,7 @@ export async function POST(req: Request) {
   const { messages, roomId } = await req.json();
 
   const result = await streamText({
-    model: google('gemini-1.5-flash'),
+    model: openai('gpt-4o-mini'),
     messages,
     system: 'You are Quorum AI...',
   });
@@ -455,7 +455,7 @@ MISTAKE 7: Nesting a Server Component inside a Client Component
     "@supabase/ssr": "latest",
     "better-auth": "latest",
     "ai": "latest",
-    "@ai-sdk/google": "latest",
+    "@ai-sdk/openai": "latest",
     "zustand": "latest",
     "zod": "latest",
     "clsx": "latest",
@@ -482,8 +482,8 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=           # Server-side ONLY — never NEXT_PUBLIC_
 
-# AI — Google Gemini (free tier at aistudio.google.com — no credit card)
-GOOGLE_GENERATIVE_AI_API_KEY=        # Server-side ONLY — never NEXT_PUBLIC_
+# AI — OpenAI
+OPENAI_API_KEY=                      # Server-side ONLY — never NEXT_PUBLIC_
 
 # GitHub OAuth (github.com → Settings → Developer settings → OAuth Apps)
 GITHUB_CLIENT_ID=
@@ -500,7 +500,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
 **Hard rule:** Variables without `NEXT_PUBLIC_` are server-only.
-Never access `SUPABASE_SERVICE_ROLE_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`,
+Never access `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`,
 or `GITHUB_CLIENT_SECRET` in any Client Component or hook.
 
 ---
@@ -512,10 +512,10 @@ or `GITHUB_CLIENT_SECRET` in any Client Component or hook.
 ```typescript
 // CORRECT — use this in all AI route handlers
 import { streamText } from 'ai';
-import { google } from '@ai-sdk/google';
+import { openai } from '@ai-sdk/openai';
 
 const result = await streamText({
-  model: google('gemini-1.5-flash'),
+  model: openai('gpt-4o-mini'),
   messages: conversationHistory,
   system: 'You are Quorum AI, a helpful team assistant...',
 });
@@ -523,8 +523,8 @@ const result = await streamText({
 
 ```typescript
 // WRONG — never write these
-import { openai } from '@ai-sdk/openai'; // ← not installed
-import OpenAI from 'openai'; // ← not installed
+import { google } from '@ai-sdk/google'; // ← not installed
+import OpenAI from 'openai'; // ← use @ai-sdk/openai instead
 ```
 
 ### Voice Features — Web Speech API (Client-Side Only)
@@ -554,7 +554,7 @@ User sends message containing "@ai"
   → Server Action: INSERT AI placeholder (status: sending, content: '')
   → Placeholder triggers Supabase Realtime → all clients show "AI typing..."
   → POST to /api/ai/chat with conversation context
-  → Route Handler streams Gemini response token by token
+  → Route Handler streams OpenAI response token by token
   → Each token: UPDATE AI message content in Supabase
   → Supabase Realtime pushes each UPDATE to all clients
   → All clients see streaming response simultaneously
@@ -760,8 +760,6 @@ ESLint is configured via `.eslintrc.json` extending `next/core-web-vitals` and
 ✓ Use `z.record(z.string(), z.unknown())` not `z.record(z.unknown())` —
   Zod requires explicit key schema
 ✓ Guard array index access (`arr[i]`) with a null check when TS is strict
-✓ Run `npm run build` before considering work complete — it catches both
-  ESLint and TypeScript errors
 ```
 
 ---
@@ -795,13 +793,13 @@ Multiple workspaces · Admin panel
 - [ ] Using h-dvh not h-screen?
 - [ ] Text inputs text-base on mobile?
 - [ ] No Tailwind config file generated?
-- [ ] No OpenAI imports?
+- [ ] No Google/Gemini imports?
 
 ---
 
 _Last updated: Project initialization_
-_AI: Google Gemini 1.5 Flash via @ai-sdk/google (not OpenAI)_
-_Voice: Web Speech API browser-native (not OpenAI Whisper/TTS)_
+_AI: OpenAI GPT-4o-mini via @ai-sdk/openai_
+_Voice: Web Speech API browser-native (no cloud TTS/STT)_
 _Hosting: Netlify (not Vercel) — ai package works fine on Netlify_
 _Tailwind: v4 — @theme in globals.css, no config file_
 _Responsive: Mobile-first — h-dvh, 44px touch targets, 16px inputs_

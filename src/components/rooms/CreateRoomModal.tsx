@@ -21,13 +21,15 @@ import { Textarea } from '@/components/ui/textarea'
 interface CreateRoomModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Called after a room is successfully created so the sidebar can refresh. */
+  onRoomCreated?: () => void
 }
 
 /**
  * Modal for creating a new room/channel.
  * Validates with Zod, calls createRoom server action, and navigates to the new room.
  */
-export default function CreateRoomModal({ open, onOpenChange }: CreateRoomModalProps) {
+export default function CreateRoomModal({ open, onOpenChange, onRoomCreated }: CreateRoomModalProps) {
   const router = useRouter()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -72,6 +74,7 @@ export default function CreateRoomModal({ open, onOpenChange }: CreateRoomModalP
       toast.success(`#${data.name} created`)
       reset()
       onOpenChange(false)
+      onRoomCreated?.()
       router.push(`/rooms/${data.id}`)
     }
   }

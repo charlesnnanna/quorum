@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-type ModalType = 'createRoom' | 'inviteUser' | null
+type ModalType = 'createRoom' | 'inviteUser' | 'browseRooms' | null
 
 interface UIStore {
   isSidebarOpen: boolean

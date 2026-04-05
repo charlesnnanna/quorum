@@ -129,6 +129,124 @@ export async function addRoomMember(input: unknown): Promise<ServerActionRespons
 }
 
 /**
+ * Fetch public rooms the current user has NOT joined yet.
+ */
+export async function getPublicRooms(): Promise<ServerActionResponse<Room[]>> {
+  const session = await auth.api.getSession({ headers: headers() })
+  if (!session) return { data: null, error: 'Unauthorized' }
+
+  const supabase = createServiceRoleClient()
+
+  // Get rooms the user is already a member of
+  const { data: memberships } = await supabase
+    .from('room_members')
+    .select('room_id')
+    .eq('user_id', session.user.id)
+
+  const joinedIds = (memberships ?? []).map((m) => m.room_id)
+
+  // Fetch public rooms excluding those already joined
+  let query = supabase
+    .from('rooms')
+    .select()
+    .eq('is_private', false)
+    .order('created_at', { ascending: false })
+
+  if (joinedIds.length > 0) {
+    query = query.not('id', 'in', `(${joinedIds.join(',')})`)
+  }
+
+  const { data, error } = await query
+
+  if (error) return { data: null, error: error.message }
+  return { data: (data ?? []) as Room[], error: null }
+}
+
+/**
+ * Join a public room. Users can only join rooms that are not private.
+ */
+export async function joinRoom(roomId: string): Promise<ServerActionResponse<{ success: boolean }>> {
+  const session = await auth.api.getSession({ headers: headers() })
+  if (!session) return { data: null, error: 'Unauthorized' }
+
+  if (!roomId) return { data: null, error: 'Room ID is required' }
+
+  const supabase = createServiceRoleClient()
+
+  // Verify the room exists and is public
+  const { data: room } = await supabase
+    .from('rooms')
+    .select('id, is_private, name')
+    .eq('id', roomId)
+    .single()
+
+  if (!room) return { data: null, error: 'Room not found' }
+  if (room.is_private) return { data: null, error: 'Cannot join a private room without an invitation' }
+
+  // Check if already a member
+  const { data: existing } = await supabase
+    .from('room_members')
+    .select()
+    .eq('room_id', roomId)
+    .eq('user_id', session.user.id)
+    .single()
+
+  if (existing) return { data: null, error: 'You are already a member of this room' }
+
+  // Add user as member
+  const { error: insertError } = await supabase
+    .from('room_members')
+    .insert({
+      room_id: roomId,
+      user_id: session.user.id,
+      role: 'member',
+    })
+
+  if (insertError) return { data: null, error: insertError.message }
+
+  // Get the user's profile for the system message
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('username')
+    .eq('id', session.user.id)
+    .single()
+
+  if (profile) {
+    await supabase.from('messages').insert({
+      room_id: roomId,
+      sender_id: null,
+      sender_type: 'ai',
+      content: `${profile.username} joined the room.`,
+      status: 'delivered',
+      metadata: { type: 'system', action: 'member_joined', userId: session.user.id },
+    })
+  }
+
+  return { data: { success: true }, error: null }
+}
+
+/**
+ * Mark a room as read for the current user by updating last_read_at to now.
+ */
+export async function markRoomAsRead(roomId: string): Promise<ServerActionResponse<{ success: boolean }>> {
+  const session = await auth.api.getSession({ headers: headers() })
+  if (!session) return { data: null, error: 'Unauthorized' }
+
+  if (!roomId) return { data: null, error: 'Room ID is required' }
+
+  const supabase = createServiceRoleClient()
+
+  const { error } = await supabase
+    .from('room_members')
+    .update({ last_read_at: new Date().toISOString() })
+    .eq('room_id', roomId)
+    .eq('user_id', session.user.id)
+
+  if (error) return { data: null, error: error.message }
+  return { data: { success: true }, error: null }
+}
+
+/**
  * Search users by username for the invite modal.
  * Excludes users already in the specified room.
  */

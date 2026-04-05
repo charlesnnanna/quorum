@@ -6,18 +6,20 @@ import { ArrowDown, Loader2 } from 'lucide-react'
 import { isSameDay } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
-import { useMessages } from '@/hooks/useMessages'
-import { useConnection } from '@/hooks/useConnection'
 import { useMessageStore } from '@/lib/stores/messageStore'
 import { useUIStore } from '@/lib/stores/uiStore'
 import MessageBubble from './MessageBubble'
+import AIMessage from '@/components/ai/AIMessage'
 import DateSeparator from './DateSeparator'
 import EmptyMessages from './EmptyMessages'
 import type { Message, Profile } from '@/types'
 
 interface MessageListProps {
   roomId: string
-  initialMessages: Message[]
+  messages: Message[]
+  isLoading: boolean
+  loadMore: () => Promise<void>
+  hasMore: boolean
   currentUser: Profile
   /** Map of userId → Profile for all room members. */
   members: Record<string, Profile>
@@ -69,16 +71,13 @@ const SCROLL_TOP_THRESHOLD = 200
 
 export default function MessageList({
   roomId,
-  initialMessages,
+  messages,
+  isLoading,
+  loadMore,
+  hasMore,
   currentUser,
   members,
 }: MessageListProps) {
-  const { messages, isLoading, loadMore, hasMore, retrySendMessage, reconcile } =
-    useMessages(roomId, initialMessages)
-
-  // Reconcile messages when connection is restored
-  useConnection(reconcile)
-
   const rows = useMemo(() => buildRows(messages), [messages])
 
   // ── Refs ────────────────────────────────────────────────────────────
@@ -91,7 +90,8 @@ export default function MessageList({
 
   // Track IDs of messages that arrived after the initial render so we can
   // animate only those (not the initial load or paginated history).
-  const knownIdsRef = useRef<Set<string>>(new Set(initialMessages.map((m) => m.id)))
+  // Seed with current messages on first render
+  const knownIdsRef = useRef<Set<string>>(new Set(messages.map((m) => m.id)))
   const [animatingIds, setAnimatingIds] = useState<Set<string>>(new Set())
 
   // Screen-reader announcement for new messages
@@ -354,6 +354,11 @@ export default function MessageList({
               >
                 {row.kind === 'date' ? (
                   <DateSeparator date={row.date} />
+                ) : row.message.sender_type === 'ai' ? (
+                  <AIMessage
+                    message={row.message}
+                    showHeader={!row.isGrouped}
+                  />
                 ) : (
                   <MessageBubble
                     message={row.message}
@@ -364,7 +369,6 @@ export default function MessageList({
                         : null
                     }
                     isGrouped={row.isGrouped}
-                    onRetry={retrySendMessage}
                   />
                 )}
               </div>

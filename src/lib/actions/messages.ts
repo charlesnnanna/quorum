@@ -2,20 +2,20 @@
 
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth/auth'
-import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 import type { Json } from '@/lib/supabase/types'
 import { messageSchema } from '@/lib/validations/message'
 import type { Message, MessageSearchResult, ServerActionResponse } from '@/types'
 
 /** Insert a new human message into a room. */
 export async function sendMessage(input: unknown): Promise<ServerActionResponse<Message>> {
-  const supabase = await createServerClient()
-
-  const { data: { session } } = await supabase.auth.getSession()
+  const session = await auth.api.getSession({ headers: headers() })
   if (!session) return { data: null, error: 'Unauthorized' }
 
   const parsed = messageSchema.safeParse(input)
   if (!parsed.success) return { data: null, error: 'Invalid input' }
+
+  const supabase = createServiceRoleClient()
 
   const { data: membership } = await supabase
     .from('room_members')
@@ -35,6 +35,45 @@ export async function sendMessage(input: unknown): Promise<ServerActionResponse<
       content: parsed.data.content,
       status: 'delivered',
       ...(parsed.data.metadata ? { metadata: parsed.data.metadata as Json } : {}),
+    })
+    .select()
+    .single()
+
+  if (error) return { data: null, error: error.message }
+  return { data: data as Message, error: null }
+}
+
+/**
+ * Insert an AI placeholder message (status: 'sending', content: '').
+ * Must use the service role client because RLS only allows human messages
+ * from the browser client (sender_type='human', sender_id=auth.uid()).
+ */
+export async function createAIPlaceholder(roomId: string): Promise<ServerActionResponse<Message>> {
+  const session = await auth.api.getSession({ headers: headers() })
+  if (!session) return { data: null, error: 'Unauthorized' }
+
+  if (!roomId) return { data: null, error: 'Room ID is required' }
+
+  const supabase = createServiceRoleClient()
+
+  // Verify membership
+  const { data: membership } = await supabase
+    .from('room_members')
+    .select()
+    .eq('room_id', roomId)
+    .eq('user_id', session.user.id)
+    .single()
+
+  if (!membership) return { data: null, error: 'Not a member of this room' }
+
+  const { data, error } = await supabase
+    .from('messages')
+    .insert({
+      room_id: roomId,
+      sender_id: null,
+      sender_type: 'ai',
+      content: '',
+      status: 'sending',
     })
     .select()
     .single()

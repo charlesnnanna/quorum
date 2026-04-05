@@ -1,6 +1,10 @@
 'use client'
 
+import { useEffect, useMemo, useTransition } from 'react'
 import { usePresence } from '@/hooks/usePresence'
+import { useMessages } from '@/hooks/useMessages'
+import { useConnection } from '@/hooks/useConnection'
+import { markRoomAsRead } from '@/lib/actions/rooms'
 import RoomHeader from '@/components/rooms/RoomHeader'
 import MessageList from '@/components/chat/MessageList'
 import MessageInput from '@/components/chat/MessageInput'
@@ -29,11 +33,36 @@ export default function RoomShell({
   memberCount,
   initialMessages,
 }: RoomShellProps) {
-  const { onlineUsers, startTyping, stopTyping } = usePresence(roomId, {
+  const presenceUser = useMemo(() => ({
     userId: profile.id,
     username: profile.username,
     avatarUrl: profile.avatar_url,
-  })
+  }), [profile.id, profile.username, profile.avatar_url])
+
+  const { onlineUsers, startTyping, stopTyping } = usePresence(roomId, presenceUser)
+
+  const {
+    messages,
+    isLoading: messagesLoading,
+    isSending,
+    loadMore,
+    hasMore,
+    sendMessage,
+    reconcile,
+  } = useMessages(roomId, initialMessages)
+
+  useConnection(reconcile)
+
+  // Mark room as read when the user enters it.
+  // Wrapped in startTransition so the server action's RSC refresh does not
+  // block or interfere with the current render — this prevents it from
+  // serialising with (and delaying) sendMessage calls.
+  const [, startTransition] = useTransition()
+  useEffect(() => {
+    startTransition(() => {
+      markRoomAsRead(roomId)
+    })
+  }, [roomId, startTransition])
 
   return (
     <div className="relative flex h-full">
@@ -51,7 +80,10 @@ export default function RoomShell({
 
         <MessageList
           roomId={roomId}
-          initialMessages={initialMessages}
+          messages={messages}
+          isLoading={messagesLoading}
+          loadMore={loadMore}
+          hasMore={hasMore}
           currentUser={profile}
           members={members}
         />
@@ -59,6 +91,8 @@ export default function RoomShell({
         <MessageInput
           roomId={roomId}
           currentUser={profile}
+          onSendMessage={sendMessage}
+          isSending={isSending}
           onStartTyping={startTyping}
           onStopTyping={stopTyping}
         />

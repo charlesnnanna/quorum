@@ -71,9 +71,13 @@ export function useVoice(): UseVoiceReturn {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startTimeRef = useRef<number>(0)
 
-  const isSupported =
-    typeof window !== 'undefined' &&
-    ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)
+  const [isSupported, setIsSupported] = useState(false)
+
+  useEffect(() => {
+    setIsSupported(
+      'webkitSpeechRecognition' in window || 'SpeechRecognition' in window
+    )
+  }, [])
 
   // Clean up on unmount
   useEffect(() => {

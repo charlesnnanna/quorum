@@ -26,6 +26,7 @@ export type RoomWithDetails = {
   room_created_at: string
   user_role: string
   member_count: number
+  unread_count: number
   last_message_id: string | null
   last_message_content: string | null
   last_message_sender: string | null

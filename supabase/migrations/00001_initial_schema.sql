@@ -30,10 +30,11 @@ CREATE TABLE rooms (
 
 -- Room members: junction table for room membership
 CREATE TABLE room_members (
-  room_id   uuid REFERENCES rooms(id) ON DELETE CASCADE,
-  user_id   uuid REFERENCES profiles(id) ON DELETE CASCADE,
-  role      text DEFAULT 'member' CHECK (role IN ('owner', 'member')),
-  joined_at timestamptz DEFAULT now(),
+  room_id      uuid REFERENCES rooms(id) ON DELETE CASCADE,
+  user_id      uuid REFERENCES profiles(id) ON DELETE CASCADE,
+  role         text DEFAULT 'member' CHECK (role IN ('owner', 'member')),
+  joined_at    timestamptz DEFAULT now(),
+  last_read_at timestamptz DEFAULT now(),
   PRIMARY KEY (room_id, user_id)
 );
 
@@ -319,19 +320,20 @@ CREATE POLICY "Users can update own messages"
 -- Returns all rooms a user belongs to, with last message + member count
 -- ────────────────────────────────────────────────────────────
 
-CREATE OR REPLACE FUNCTION get_user_rooms(p_user_id uuid)
+CREATE OR REPLACE FUNCTION get_user_rooms(p_user_id text)
 RETURNS TABLE (
   room_id          uuid,
   room_name        text,
   room_description text,
   is_private       boolean,
-  created_by       uuid,
+  created_by       text,
   room_created_at  timestamptz,
   user_role        text,
   member_count     bigint,
+  unread_count     bigint,
   last_message_id       uuid,
   last_message_content  text,
-  last_message_sender   uuid,
+  last_message_sender   text,
   last_message_type     text,
   last_message_at       timestamptz
 )
@@ -348,9 +350,10 @@ AS $$
     r.created_at      AS room_created_at,
     rm.role           AS user_role,
     mc.member_count,
+    uc.unread_count,
     lm.id             AS last_message_id,
     lm.content        AS last_message_content,
-    lm.sender_id      AS last_message_sender,
+    lm.sender_name    AS last_message_sender,
     lm.sender_type    AS last_message_type,
     lm.created_at     AS last_message_at
   FROM room_members rm
@@ -361,10 +364,18 @@ AS $$
     FROM room_members
     WHERE room_id = r.id
   ) mc ON true
-  -- Last message per room
+  -- Unread message count per room
   LEFT JOIN LATERAL (
-    SELECT m.id, m.content, m.sender_id, m.sender_type, m.created_at
+    SELECT count(*) AS unread_count
     FROM messages m
+    WHERE m.room_id = r.id
+      AND m.created_at > rm.last_read_at
+  ) uc ON true
+  -- Last message per room (with sender username)
+  LEFT JOIN LATERAL (
+    SELECT m.id, m.content, p.username AS sender_name, m.sender_type, m.created_at
+    FROM messages m
+    LEFT JOIN profiles p ON p.id = m.sender_id
     WHERE m.room_id = r.id
     ORDER BY m.created_at DESC
     LIMIT 1

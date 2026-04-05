@@ -9,6 +9,7 @@ import {
   Search,
   LogOut,
   MessageSquare,
+  Globe,
 } from 'lucide-react'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { cn } from '@/lib/utils'
@@ -22,6 +23,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import ThemeToggle from '@/components/ui/ThemeToggle'
 import CreateRoomModal from './CreateRoomModal'
+import BrowseRoomsModal from './BrowseRoomsModal'
 import type { Profile, RoomWithDetails } from '@/types'
 
 interface RoomSidebarProps {
@@ -46,11 +48,11 @@ export default function RoomSidebar({
 }: RoomSidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
-  const { rooms, isLoading } = useRooms(initialRooms)
   const { modal, setModal, setMobileScreen } = useUIStore()
   const [search, setSearch] = useState('')
 
   const activeRoomId = pathname.match(/\/rooms\/([^/]+)/)?.[1] ?? null
+  const { rooms, isLoading, refresh } = useRooms(initialRooms, activeRoomId)
 
   const filtered = search
     ? rooms.filter((r) =>
@@ -85,9 +87,21 @@ export default function RoomSidebar({
             onClick={() => setModal('createRoom')}
             aria-label="Create new channel"
             title="New channel"
-            className="mb-2 size-11"
+            className="mb-1 size-11"
           >
             <Plus className="size-5" />
+          </Button>
+
+          {/* Browse public channels */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setModal('browseRooms')}
+            aria-label="Browse public channels"
+            title="Browse public channels"
+            className="mb-2 size-11"
+          >
+            <Globe className="size-5" />
           </Button>
 
           {/* Room list — icons only */}
@@ -104,10 +118,10 @@ export default function RoomSidebar({
                     type="button"
                     onClick={() => handleRoomClick(room.room_id)}
                     aria-current={room.room_id === activeRoomId ? 'page' : undefined}
-                    aria-label={`${room.is_private ? 'Private' : ''} ${room.room_name}`}
+                    aria-label={`${room.is_private ? 'Private' : ''} ${room.room_name}${room.unread_count > 0 ? `, ${room.unread_count} unread` : ''}`}
                     title={room.room_name}
                     className={cn(
-                      'flex size-11 shrink-0 items-center justify-center rounded-lg transition-colors',
+                      'relative flex size-11 shrink-0 items-center justify-center rounded-lg transition-colors',
                       'hover:bg-sidebar-accent',
                       room.room_id === activeRoomId
                         ? 'bg-sidebar-primary text-sidebar-primary-foreground'
@@ -118,6 +132,11 @@ export default function RoomSidebar({
                       <Lock className="size-4" />
                     ) : (
                       <Hash className="size-4" />
+                    )}
+                    {room.unread_count > 0 && room.room_id !== activeRoomId && (
+                      <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                        {room.unread_count > 9 ? '9+' : room.unread_count}
+                      </span>
                     )}
                   </button>
                 ))
@@ -154,6 +173,13 @@ export default function RoomSidebar({
         <CreateRoomModal
           open={modal === 'createRoom'}
           onOpenChange={(open) => setModal(open ? 'createRoom' : null)}
+          onRoomCreated={refresh}
+        />
+
+        {/* Browse public rooms modal */}
+        <BrowseRoomsModal
+          open={modal === 'browseRooms'}
+          onOpenChange={(open) => setModal(open ? 'browseRooms' : null)}
         />
       </>
     )
@@ -167,15 +193,27 @@ export default function RoomSidebar({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-sidebar-border px-4 py-3">
           <h2 className="text-lg font-semibold">Channels</h2>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setModal('createRoom')}
-            aria-label="Create new channel"
-            className="size-11"
-          >
-            <Plus className="size-5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setModal('browseRooms')}
+              aria-label="Browse public channels"
+              title="Browse public channels"
+              className="size-11"
+            >
+              <Globe className="size-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setModal('createRoom')}
+              aria-label="Create new channel"
+              className="size-11"
+            >
+              <Plus className="size-5" />
+            </Button>
+          </div>
         </div>
 
         {/* Search */}
@@ -289,6 +327,12 @@ export default function RoomSidebar({
         open={modal === 'createRoom'}
         onOpenChange={(open) => setModal(open ? 'createRoom' : null)}
       />
+
+      {/* Browse public rooms modal */}
+      <BrowseRoomsModal
+        open={modal === 'browseRooms'}
+        onOpenChange={(open) => setModal(open ? 'browseRooms' : null)}
+      />
     </>
   )
 }
@@ -308,12 +352,14 @@ function RoomItem({
     ? formatDistanceToNowStrict(new Date(room.last_message_at), { addSuffix: false })
     : null
 
+  const hasUnread = room.unread_count > 0 && !isActive
+
   return (
     <button
       type="button"
       onClick={onClick}
       aria-current={isActive ? 'page' : undefined}
-      aria-label={`${room.is_private ? 'Private channel' : 'Channel'}: ${room.room_name}, ${room.member_count} members`}
+      aria-label={`${room.is_private ? 'Private channel' : 'Channel'}: ${room.room_name}, ${room.member_count} members${hasUnread ? `, ${room.unread_count} unread messages` : ''}`}
       className={cn(
         'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
         'hover:bg-sidebar-accent',
@@ -337,14 +383,18 @@ function RoomItem({
       {/* Room info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm font-medium">{room.room_name}</span>
+          <span className={cn('truncate text-sm', hasUnread ? 'font-semibold text-foreground' : 'font-medium')}>
+            {room.room_name}
+          </span>
           {timeAgo && (
-            <span className="shrink-0 text-xs text-muted-foreground">{timeAgo}</span>
+            <span suppressHydrationWarning className={cn('shrink-0 text-xs', hasUnread ? 'font-semibold text-foreground' : 'text-muted-foreground')}>
+              {timeAgo}
+            </span>
           )}
         </div>
         <div className="flex items-center gap-1.5">
           {room.last_message_content ? (
-            <p className="truncate text-xs text-muted-foreground">
+            <p className={cn('truncate text-xs', hasUnread ? 'font-medium text-foreground' : 'text-muted-foreground')}>
               {room.last_message_sender && (
                 <span className="font-medium">{room.last_message_sender}: </span>
               )}
@@ -356,13 +406,17 @@ function RoomItem({
         </div>
       </div>
 
-      {/* Member count badge */}
-      {room.member_count > 0 && (
+      {/* Unread count badge or member count */}
+      {hasUnread ? (
+        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
+          {room.unread_count > 9 ? '9+' : room.unread_count}
+        </span>
+      ) : room.member_count > 0 ? (
         <span className="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground">
           <MessageSquare className="size-3" />
           {room.member_count}
         </span>
-      )}
+      ) : null}
     </button>
   )
 }

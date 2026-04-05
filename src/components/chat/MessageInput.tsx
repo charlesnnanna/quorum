@@ -1,10 +1,10 @@
 'use client'
 
 import { useRef, useState, useCallback, useEffect } from 'react'
-import { Send, Mic, Square, X } from 'lucide-react'
+import { Send, Mic, Square, X, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { sendMessage } from '@/lib/actions/messages'
 import { useVoice } from '@/hooks/useVoice'
+import { useAIStream } from '@/hooks/useAIStream'
 import type { Profile } from '@/types'
 
 const MAX_CHARS = 4000
@@ -13,6 +13,9 @@ const AI_MENTION_REGEX = /@ai\b/gi
 interface MessageInputProps {
   roomId: string
   currentUser: Profile
+  onSendMessage: (content: string, senderId: string) => Promise<{ error: string | null }>
+  /** True while the server is processing the send request. */
+  isSending?: boolean
   isAIResponding?: boolean
   onStartTyping?: () => void
   onStopTyping?: () => void
@@ -24,15 +27,18 @@ interface MessageInputProps {
  */
 export default function MessageInput({
   roomId,
-  currentUser: _currentUser,
+  currentUser,
+  onSendMessage,
+  isSending = false,
   isAIResponding = false,
   onStartTyping,
   onStopTyping,
 }: MessageInputProps) {
   const [content, setContent] = useState('')
-  const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const { streamAI } = useAIStream({ roomId, userId: currentUser.id })
 
   const {
     startListening,
@@ -85,26 +91,24 @@ export default function MessageInput({
     onStartTyping?.()
   }
 
-  const handleSend = useCallback(async (voiceOriginated = false) => {
+  const handleSend = useCallback(async (_voiceOriginated = false) => {
     const trimmed = content.trim()
     if (!trimmed || isOverLimit || isDisabled) return
 
-    setIsSending(true)
     setSendError(null)
     onStopTyping?.()
 
-    const metadata = voiceOriginated
-      ? { source: 'voice', original_language: 'en' }
-      : undefined
+    // Clear input immediately
+    setContent('')
+    textareaRef.current?.focus()
 
-    const { error } = await sendMessage({
-      content: trimmed,
-      roomId,
-      ...(metadata ? { metadata } : {}),
-    })
+    const shouldTriggerAI = AI_MENTION_REGEX.test(trimmed)
+    AI_MENTION_REGEX.lastIndex = 0
+
+    // Wait for server confirmation before the message appears in chat
+    const { error } = await onSendMessage(trimmed, currentUser.id)
 
     if (error) {
-      // Map server errors to user-friendly messages
       const friendlyError =
         error === 'Not a member of this room'
           ? "You're no longer a member of this room"
@@ -112,14 +116,16 @@ export default function MessageInput({
             ? 'Your session has expired. Please sign in again.'
             : 'Failed to send message. Please try again.'
       setSendError(friendlyError)
-      setIsSending(false)
       return
     }
 
-    setContent('')
-    setIsSending(false)
-    textareaRef.current?.focus()
-  }, [content, isOverLimit, isDisabled, roomId, onStopTyping])
+    // Trigger AI flow if message contains @ai
+    if (shouldTriggerAI) {
+      streamAI(trimmed).then(({ error: aiError }) => {
+        if (aiError) setSendError(aiError)
+      })
+    }
+  }, [content, isOverLimit, isDisabled, onStopTyping, onSendMessage, currentUser.id, streamAI])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -265,9 +271,11 @@ export default function MessageInput({
               onKeyDown={handleKeyDown}
               aria-label="Message"
               placeholder={
-                isAIResponding
-                  ? 'AI is responding...'
-                  : 'Type a message... (@ai to summon AI)'
+                isSending
+                  ? 'Sending...'
+                  : isAIResponding
+                    ? 'AI is responding...'
+                    : 'Type a message... (@ai to summon AI)'
               }
               disabled={isDisabled}
               rows={1}
@@ -303,14 +311,18 @@ export default function MessageInput({
               type="button"
               onClick={() => handleSend()}
               disabled={isDisabled || isOverLimit}
-              aria-label="Send message"
+              aria-label={isSending ? 'Sending message…' : 'Send message'}
               className={cn(
                 'flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors',
                 'hover:bg-primary/90',
                 'disabled:cursor-not-allowed disabled:opacity-50'
               )}
             >
-              <Send className="size-5" />
+              {isSending ? (
+                <Loader2 className="size-5 animate-spin" />
+              ) : (
+                <Send className="size-5" />
+              )}
             </button>
           )}
         </div>
