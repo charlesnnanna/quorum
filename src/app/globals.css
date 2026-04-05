@@ -146,6 +146,22 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+  button,
+  a,
+  select,
+  summary,
+  [role="button"],
+  [role="link"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="option"],
+  [type="checkbox"],
+  [type="radio"],
+  [type="submit"],
+  [type="reset"],
+  label[for] {
+    cursor: pointer;
+  }
   body {
     @apply bg-background text-foreground;
   }
